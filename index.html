@@ -7163,8 +7163,9 @@ window.showNews = function() {
         const gelesenListe = (news.gelesen || "").toString().toLowerCase().split(',').map(s => s.trim());  
         const istGelesen = gelesenListe.includes(aktuellerUser);  
         
-        // 1. Erstellungsdatum aus Spalte 'datum' (für unten links)
-        let rawZeitstempel = news.datum ? news.datum.toString() : (news.zeitstempel ? news.zeitstempel.toString() : '');  
+        // 1. Datum für unten links: Priorität auf 'datum_event' (Stundenplan), sonst normales Datum/Zeitstempel
+        let rawDatumQuelle = news.datum_event || news.datum || news.zeitstempel || '';
+        let rawZeitstempel = rawDatumQuelle.toString();  
         if (rawZeitstempel.includes('T')) rawZeitstempel = rawZeitstempel.split('T')[0];
         let formatiertesErstellungsDatum = rawZeitstempel;  
         if (formatiertesErstellungsDatum.includes('-')) {  
@@ -9248,8 +9249,8 @@ async function uebernahmeAnnehmenAusfuehren(angebotsSlotData) {
             await window.saveNewsToDBFrontend({
                 typ: "meldung",
                 titel: "Material-Übernahme",
-                text: `${activeUser.toUpperCase()} hat deine Material-Weitergabe in Halle ${angebotsHalle} übernommen.`,
-                datum: aktuellesDatum,
+                text: `${activeUser.toLowerCase()} übernimmt dein angebotenes Material!`,
+                datum_event: aktuellesDatum, // Setzt das Datum der Materialübernahme für die Anzeige unten links
                 slot: slotNummer,
                 empfaenger: [anbieterKuerzel],
                 verfasser: activeUser
@@ -9270,6 +9271,8 @@ async function uebernahmeAnnehmenAusfuehren(angebotsSlotData) {
         console.error("Fehler bei der Materialübernahme:", err);
     }
 }
+
+
     
 async function pruefeUndRueckgaengigMachen(slotNummer, halle, neuerMaterialWert) {
     if (!neuerMaterialWert || neuerMaterialWert.trim() === "") {
