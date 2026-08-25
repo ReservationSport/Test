@@ -8697,25 +8697,6 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
     const now = new Date().toISOString();
     const halle = currentSlotData.halle || "";
 
-    // 1. Versuchen, den Partner (Anbieter) zu ermitteln:
-    // Entweder direkt aus weitergabe/verfasser oder durch Suchen im selben/vorherigen Slot mit gleicher Halle
-    let anbieterOderUebernehmer = currentSlotData.weitergabe || "";
-    
-    if (!anbieterOderUebernehmer && window.lastPlanData) {
-        // Suche in window.lastPlanData nach einer Buchung in derselben Halle, die als "erledigt" markiert war
-        for (let s in window.lastPlanData) {
-            const entry = window.lastPlanData[s];
-            if (entry && entry.halle === halle && entry.weitergabe && String(s) !== String(slotNum)) {
-                anbieterOderUebernehmer = entry.weitergabe;
-                break;
-            }
-        }
-    }
-    // Letzter Fallback auf verfasser, falls immer noch leer und nicht man selbst
-    if (!anbieterOderUebernehmer && currentSlotData.verfasser) {
-        anbieterOderUebernehmer = currentSlotData.verfasser;
-    }
-
     let rawUserKuerzel = "";
     if (typeof userKuerzel === 'string' && userKuerzel.trim() !== "") {
         rawUserKuerzel = userKuerzel;
@@ -8726,6 +8707,31 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
         rawUserKuerzel = el ? (el.value || "") : "";
     }
     const safeUserKuerzel = String(rawUserKuerzel).trim() || "lp";
+
+    // 1. Partner (Anbieter) korrekt ermitteln (Status-Worte wie "erledigt" ignorieren!)
+    let anbieterOderUebernehmer = "";
+    
+    if (currentSlotData.weitergabe && currentSlotData.weitergabe.toLowerCase() !== "erledigt") {
+        anbieterOderUebernehmer = currentSlotData.weitergabe;
+    }
+
+    // Wenn kein direkter Partner da ist, im Speicher nach dem passenden Slot in derselben Halle suchen
+    if (!anbieterOderUebernehmer && window.lastPlanData) {
+        for (let s in window.lastPlanData) {
+            const entry = window.lastPlanData[s];
+            if (entry && entry.halle === halle && String(s) !== String(slotNum)) {
+                if (entry.verfasser && entry.verfasser.toLowerCase() !== safeUserKuerzel.toLowerCase()) {
+                    anbieterOderUebernehmer = entry.verfasser;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Fallback auf den Verfasser des aktuellen Slots
+    if (!anbieterOderUebernehmer && currentSlotData.verfasser && currentSlotData.verfasser.toLowerCase() !== safeUserKuerzel.toLowerCase()) {
+        anbieterOderUebernehmer = currentSlotData.verfasser;
+    }
 
     console.log("🔍 Debug Stornierung - Ermittelter Partner (Anbieter):", anbieterOderUebernehmer);
 
@@ -8746,7 +8752,7 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
             btn.style.opacity = "1";
         }
 
-        // News-Meldung senden, wenn ein Partner gefunden wurde und man nicht sich selbst schreibt
+        // News-Meldung senden, wenn ein echter Partner gefunden wurde
         if (anbieterOderUebernehmer) {
             const zielEmpfaenger = (anbieterOderUebernehmer.toLowerCase() === safeUserKuerzel.toLowerCase() && currentSlotData.verfasser) 
                 ? currentSlotData.verfasser 
