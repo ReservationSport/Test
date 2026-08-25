@@ -8581,48 +8581,17 @@ async function saveMaterialSelection(mat, detail, time, slot, klasse, btn, userK
     }
     const safeUserKuerzel = String(rawUserKuerzel).trim() || currentSlotData.verfasser || "";
 
-    // --- NEU: Prüfen ob ein vorheriger "erledigt"-Status bei Materialänderung zurückgesetzt werden muss ---
+    // --- Aufruf deiner zentralen Funktion zum Zurücksetzen des "erledigt"-Status ---
     try {
-        const vorherigerBereich = typeof ermittleVorherigenSlotBlock === 'function' ? ermittleVorherigenSlotBlock(slotNum) : null;
-        if (vorherigerBereich && halle && window.supabaseClient) {
-            const { data: erledigteBuchungen, error: checkError } = await window.supabaseClient
-                .from('buchungen_db')
-                .select('*')
-                .eq('datum', targetDate)
-                .gte('slot', vorherigerBereich.start)
-                .lte('slot', vorherigerBereich.ende)
-                .eq('halle', halle)
-                .eq('weitergabe', 'erledigt');
-
-            if (!checkError && Array.isArray(erledigteBuchungen) && erledigteBuchungen.length > 0) {
-                const kollegenBuchung = erledigteBuchungen[0];
-                
-                // Status beim Kollegen von "erledigt" zurück auf "ja" ändern via Supabase Client
-                const { error: updateError } = await window.supabaseClient
-                    .from('buchungen_db')
-                    .update({ weitergabe: "ja" })
-                    .eq('id', kollegenBuchung.id);
-
-                if (!updateError) {
-                    const kollegenSlotNummer = kollegenBuchung.slot;
-                    if (window.lastPlanData && window.lastPlanData[kollegenSlotNummer]) {
-                        window.lastPlanData[kollegenSlotNummer].weitergabe = "ja";
-                        const kollegenBox = document.querySelector(`[data-slot="${kollegenSlotNummer}"]`);
-                        if (kollegenBox) {
-                            markBoxWithMaterialIcon(
-                                kollegenBox, 
-                                window.lastPlanData[kollegenSlotNummer].material, 
-                                window.lastPlanData[kollegenSlotNummer].details
-                            );
-                        }
-                    }
-                }
-            }
+        if (typeof window.pruefeUndRueckgaengigMachen === 'function') {
+            await window.pruefeUndRueckgaengigMachen(slotNum, targetDate, halle);
+        } else if (typeof pruefeUndRueckgaengigMachen === 'function') {
+            await pruefeUndRueckgaengigMachen(slotNum, targetDate, halle);
         }
     } catch (err) {
-        console.error("Fehler beim Zurücksetzen der Übernahme im Save:", err);
+        console.error("Fehler beim Aufruf von pruefeUndRueckgaengigMachen im Save:", err);
     }
-    // -----------------------------------------------------------------------------------------------
+    // -------------------------------------------------------------------------------
 
     // Visueller Callback nach erfolgreicher Verarbeitung durch prozessiereAktion
     const onCompleteVisuals = (payloadData) => {
@@ -8641,6 +8610,7 @@ async function saveMaterialSelection(mat, detail, time, slot, klasse, btn, userK
                 ...window.lastPlanData[currentSlotId],
                 material: materialVal,
                 details: detailVal,
+                weitergabe: null,
                 verfasser: safeUserKuerzel
             };
         }
@@ -8662,6 +8632,7 @@ async function saveMaterialSelection(mat, detail, time, slot, klasse, btn, userK
         material: mat,
         kommentar: currentSlotData.kommentar || "",
         details: detail || "",
+        weitergabe: null, 
         timestamp: now,
         typ: currentSlotData.typ || "buchung",
         verfasser: safeUserKuerzel
@@ -8717,7 +8688,7 @@ async function saveMaterialSelection(mat, detail, time, slot, klasse, btn, userK
         }
     }
 }
-    
+
 
 async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
     if (btn) {
@@ -8742,46 +8713,15 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
     }
     const safeUserKuerzel = String(rawUserKuerzel).trim() || currentSlotData.verfasser || "";
 
-    // --- NEU: Prüfen ob ein vorheriger "erledigt"-Status zurückgesetzt werden muss ---
+    // --- Aufruf deiner zentralen Funktion zum Zurücksetzen des "erledigt"-Status ---
     try {
-        const vorherigerBereich = typeof ermittleVorherigenSlotBlock === 'function' ? ermittleVorherigenSlotBlock(slotNum) : null;
-        if (vorherigerBereich && halle && window.supabaseClient) {
-            const { data: erledigteBuchungen, error: checkError } = await window.supabaseClient
-                .from('buchungen_db')
-                .select('*')
-                .eq('datum', targetDate)
-                .gte('slot', vorherigerBereich.start)
-                .lte('slot', vorherigerBereich.ende)
-                .eq('halle', halle)
-                .eq('weitergabe', 'erledigt');
-
-            if (!checkError && Array.isArray(erledigteBuchungen) && erledigteBuchungen.length > 0) {
-                const kollegenBuchung = erledigteBuchungen[0];
-                
-                // Status beim Kollegen von "erledigt" zurück auf "ja" ändern via Supabase Client
-                const { error: updateError } = await window.supabaseClient
-                    .from('buchungen_db')
-                    .update({ weitergabe: "ja" })
-                    .eq('id', kollegenBuchung.id);
-
-                if (!updateError) {
-                    const kollegenSlotNummer = kollegenBuchung.slot;
-                    if (window.lastPlanData && window.lastPlanData[kollegenSlotNummer]) {
-                        window.lastPlanData[kollegenSlotNummer].weitergabe = "ja";
-                        const kollegenBox = document.querySelector(`[data-slot="${kollegenSlotNummer}"]`);
-                        if (kollegenBox) {
-                            markBoxWithMaterialIcon(
-                                kollegenBox, 
-                                window.lastPlanData[kollegenSlotNummer].material, 
-                                window.lastPlanData[kollegenSlotNummer].details
-                            );
-                        }
-                    }
-                }
-            }
+        if (typeof window.pruefeUndRueckgaengigMachen === 'function') {
+            await window.pruefeUndRueckgaengigMachen(slotNum, targetDate, halle);
+        } else if (typeof pruefeUndRueckgaengigMachen === 'function') {
+            await pruefeUndRueckgaengigMachen(slotNum, targetDate, halle);
         }
     } catch (err) {
-        console.error("Fehler beim Zurücksetzen der Übernahme im Delete:", err);
+        console.error("Fehler beim Aufruf von pruefeUndRueckgaengigMachen im Delete:", err);
     }
     // -------------------------------------------------------------------------------
 
