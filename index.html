@@ -6374,7 +6374,7 @@ window.loadPlan = async function(isExplicitUserAction = false) {
                         if (row.details) plan[slot].details = row.details.toString();
                         if (row.typ) plan[slot].typ = row.typ.toString();
                         if (row.verfasser) plan[slot].verfasser = row.verfasser.toString();
-                        if (row.weitergabe) plan[slot].weitergabe = row.weitergabe.toString();
+                        if (row.weitergabe) plan[slot].weitergabe = row.weitergabe.toString(); // <--- HIER ERGÄNZT
                     }
                 }
             });
@@ -6630,7 +6630,7 @@ window.syncPlan = async function() {
                         if (row.details) newPlan[slot].details = row.details.toString();
                         if (row.typ) newPlan[slot].typ = row.typ.toString();
                         if (row.verfasser) newPlan[slot].verfasser = row.verfasser.toString();
-                        if (row.weitergabe) newPlan[slot].weitergabe = row.weitergabe.toString();
+                        if (row.weitergabe) newPlan[slot].weitergabe = row.weitergabe.toString(); // <--- HIER ERGÄNZT
                     }
                 }
             });
@@ -6734,7 +6734,6 @@ window.syncPlan = async function() {
         // Stiller Fail im Hintergrund-Sync
     }
 };
-
 
     
 /* ============================================================
