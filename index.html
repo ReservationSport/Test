@@ -9120,7 +9120,7 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
     const slotNummer = parseInt(rawSlot, 10);
 
     if (!slotNummer || isNaN(slotNummer)) {
-        alert("Fehler: Konnte die Slot-Nummer des Angebots nicht ermitteln.");
+        console.error("Fehler: Konnte die Slot-Nummer des Angebots nicht ermitteln.");
         return;
     }
 
@@ -9132,12 +9132,12 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
     const angebotsHalle = angebotsSlotData.halle || "";
 
     if (!activeUser) {
-        alert("Fehler: Aktueller Benutzer konnte nicht ermittelt werden.");
+        console.error("Fehler: Aktueller Benutzer konnte nicht ermittelt werden.");
         return;
     }
 
     try {
-        // 1. Zuerst die genaue ID des Kollegeneintrags (Angebots) aus der DB holen, da angebotsSlotData.id oft fehlt
+        // 1. Zuerst die genaue ID des Kollegeneintrags (Angebots) aus der DB holen
         const kollegenQuery = await fetch(
             `${SUPABASE_URL}/rest/v1/buchungen_db?datum=eq.${aktuellesDatum}&slot=eq.${slotNummer}&halle=eq.${encodeURIComponent(angebotsHalle)}&select=id`,
             {
@@ -9164,7 +9164,7 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
         const meineBuchungen = await searchResponse.json();
 
         if (!Array.isArray(meineBuchungen) || meineBuchungen.length === 0) {
-            alert(`Fehler: Deine Buchung im Folgeslot (Slots ${naechsterBereich.start}-${naechsterBereich.ende}) in Halle "${angebotsHalle}" wurde nicht gefunden.`);
+            console.warn(`Deine Buchung im Folgeslot (Slots ${naechsterBereich.start}-${naechsterBereich.ende}) in Halle "${angebotsHalle}" wurde nicht gefunden.`);
             return;
         }
 
@@ -9190,7 +9190,7 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
             }
         );
 
-        // 4. UPDATE für den KOLLEGEN: weitergabe explizit auf "erledigt" setzen
+        // 4. UPDATE für den KOLLEGEN: weitergabe auf "erledigt" setzen
         let updateKollege = Promise.resolve();
         if (kollegenBuchungsId) {
             updateKollege = fetch(
@@ -9212,9 +9212,10 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
 
         await Promise.all([updateMeineBuchung, updateKollege]);
 
-        alert("Material erfolgreich übernommen!");
-        
-        // 5. Lokalen Zustand direkt anpassen, damit das grüne Häkchen sofort ohne harten Reload erscheint
+        // 5. Material-Info-Fenster (Overlay) direkt schließen
+        document.querySelectorAll('.material-info-overlay').forEach(el => el.remove());
+
+        // 6. Lokalen Zustand direkt anpassen, damit das grüne Häkchen sofort erscheint
         if (window.lastPlanData && window.lastPlanData[slotNummer]) {
             window.lastPlanData[slotNummer].weitergabe = "erledigt";
             const box = document.querySelector(`[data-slot="${slotNummer}"]`);
@@ -9223,22 +9224,15 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
             }
         }
 
-        // 6. Plan sanft für das aktuell ausgewählte Datum aktualisieren (ohne auf heute zurückzuspringen)
+        // 7. Plan sanft aktualisieren (ohne das Datum zu verlieren)
         if (typeof ladePlan === 'function') {
-            ladePlan(false); // Übergabe false, damit das Datum beibehalten wird (je nach deiner ladePlan-Signatur)
+            ladePlan(false);
         } else if (typeof window.loadPlan === 'function') {
             window.loadPlan(false);
-        } else {
-            // Falls keine Sanft-Ladefunktion da ist, den aktuellen Tag im Datum-Picker beibehalten
-            const currentSelectedDate = aktuellesDatum;
-            if (typeof loadPlanForDate === 'function') {
-                loadPlanForDate(currentSelectedDate);
-            }
         }
 
     } catch (err) {
         console.error("Fehler bei der Materialübernahme:", err);
-        alert("Ein unerwarteter Fehler ist aufgetreten.");
     }
 }
 
