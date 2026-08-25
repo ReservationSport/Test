@@ -9169,7 +9169,7 @@ async function uebernahmeAnnehmenAusfuehren(angebotsSlotData) {
 
     try {
         const kollegenQuery = await fetch(
-            `${SUPABASE_URL}/rest/v1/buchungen_db?datum=eq.${aktuellesDatum}&slot=eq.${slotNummer}&halle=eq.${encodeURIComponent(angebotsHalle)}&select=id`,
+            `${SUPABASE_URL}/rest/v1/buchungen_db?datum=eq.${aktuellesDatum}&slot=eq.${slotNummer}&halle=eq.${encodeURIComponent(angebotsHalle)}&select=*`,
             {
                 headers: {
                     "apikey": SUPABASE_ANON_KEY,
@@ -9178,7 +9178,9 @@ async function uebernahmeAnnehmenAusfuehren(angebotsSlotData) {
             }
         );
         const kollegenErgebnis = await kollegenQuery.json();
-        const kollegenBuchungsId = (Array.isArray(kollegenErgebnis) && kollegenErgebnis.length > 0) ? kollegenErgebnis[0].id : angebotsSlotData.id;
+        const kollegenBuchung = (Array.isArray(kollegenErgebnis) && kollegenErgebnis.length > 0) ? kollegenErgebnis[0] : null;
+        const kollegenBuchungsId = kollegenBuchung ? kollegenBuchung.id : angebotsSlotData.id;
+        const anbieterKuerzel = kollegenBuchung ? kollegenBuchung.verfasser : "";
 
         const searchResponse = await fetch(
             `${SUPABASE_URL}/rest/v1/buchungen_db?datum=eq.${aktuellesDatum}&slot=gte.${naechsterBereich.start}&slot=lte.${naechsterBereich.ende}&verfasser=eq.${encodeURIComponent(activeUser)}&halle=eq.${encodeURIComponent(angebotsHalle)}&select=*`, 
@@ -9240,6 +9242,19 @@ async function uebernahmeAnnehmenAusfuehren(angebotsSlotData) {
         }
 
         await Promise.all([updateMeineBuchung, updateKollege]);
+
+        // Automatische News an den Anbieter senden, falls ermittelbar
+        if (anbieterKuerzel && typeof window.saveNewsToDBFrontend === 'function') {
+            await window.saveNewsToDBFrontend({
+                typ: "meldung",
+                titel: "Material-Übernahme",
+                text: `${activeUser.toUpperCase()} hat deine Material-Weitergabe in Halle ${angebotsHalle} übernommen.`,
+                datum: aktuellesDatum,
+                slot: slotNummer,
+                empfaenger: [anbieterKuerzel],
+                verfasser: activeUser
+            });
+        }
 
         document.querySelectorAll('.material-info-overlay').forEach(el => el.remove());
 
