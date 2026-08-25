@@ -9101,7 +9101,6 @@ window.toggleMaterialAbgabe = async function(slotId, activate) {
 
 // Hilfsfunktion: Findet heraus, zu welchem 5er-Block ein Slot gehört und gibt den nächsten 5er-Block zurück
 function ermittleNaechstenSlotBlock(aktuellerSlot) {
-    // Beispiel: Slot 23 / 5 = 4.6 -> aufgerundet 5. Nächster Block beginnt bei (5 * 5) + 1 = 26.
     let aktuellerBlockNummer = Math.ceil(aktuellerSlot / 5);
     let naechsterBlockStart = (aktuellerBlockNummer * 5) + 1;
     let naechsterBlockEnde = naechsterBlockStart + 4;
@@ -9109,18 +9108,25 @@ function ermittleNaechstenSlotBlock(aktuellerSlot) {
     return { start: naechsterBlockStart, ende: naechsterBlockEnde };
 }
 
+// NEU: Gegenstück dazu, um den vorherigen 5er-Block sauber zu ermitteln
+function ermittleVorherigenSlotBlock(aktuellerSlot) {
+    let sNum = parseInt(aktuellerSlot, 10);
+    let aktuellerBlockNummer = Math.ceil(sNum / 5);
+    // Wenn wir im Block 2 sind (Slots 6-10), ist der vorige Block 1 (Slots 1-5)
+    let vorherigerBlockNummer = Math.max(1, aktuellerBlockNummer - 1);
+    let vorherigerBlockStart = ((vorherigerBlockNummer - 1) * 5) + 1;
+    let vorherigerBlockEnde = vorherigerBlockStart + 4;
+    
+    return { start: vorherigerBlockStart, ende: vorherigerBlockEnde };
+}
+
 // Die korrigierte Hauptprüfung beim Klick auf das Material-Icon
 async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktuellerUser) {
-    // 1. Nächsten Slot-Bereich ermitteln (z.B. aus Slot 5 wird 6 bis 10)
     const naechsterBereich = ermittleNaechstenSlotBlock(angebotsSlot);
-    
-    // 2. Aktuell ausgewähltes Datum dynamisch aus dem Input-Feld holen (mit Fallback auf heute)
     const datumInput = document.querySelector('input[type="date"]');
     const aktuellesDatum = datumInput && datumInput.value ? datumInput.value : new Date().toISOString().split('T')[0];
 
     try {
-        // 3. Abfrage an Supabase: 
-        // Wir prüfen das dynamische Datum, den nächsten Slot-Bereich, dein Kürzel im Feld 'verfasser' und die Halle
         const response = await fetch(
             `${SUPABASE_URL}/rest/v1/buchungen_db?datum=eq.${aktuellesDatum}&slot=gte.${naechsterBereich.start}&slot=lte.${naechsterBereich.ende}&verfasser=eq.${encodeURIComponent(aktuellerUser)}&halle=eq.${encodeURIComponent(angebotsHalle)}&select=*`, 
             {
@@ -9132,8 +9138,6 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
         );
         
         const data = await response.json();
-
-        // Wenn Einträge gefunden wurden, bist du im nächsten Block in derselben Halle eingetragen!
         return Array.isArray(data) && data.length > 0;
 
     } catch (err) {
@@ -9142,8 +9146,7 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
     }
 }
 
-
- async function uebernahmeAnnehmenAusfuehren(angebotsSlotData) {
+async function uebernahmeAnnehmenAusfuehren(angebotsSlotData) {
     const rawSlot = angebotsSlotData.slot || angebotsSlotData.slotId || angebotsSlotData.slot_id || 0;
     const slotNummer = parseInt(rawSlot, 10);
 
@@ -9165,7 +9168,6 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
     }
 
     try {
-        // 1. Zuerst die genaue ID des Kollegeneintrags (Angebots) aus der DB holen
         const kollegenQuery = await fetch(
             `${SUPABASE_URL}/rest/v1/buchungen_db?datum=eq.${aktuellesDatum}&slot=eq.${slotNummer}&halle=eq.${encodeURIComponent(angebotsHalle)}&select=id`,
             {
@@ -9178,7 +9180,6 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
         const kollegenErgebnis = await kollegenQuery.json();
         const kollegenBuchungsId = (Array.isArray(kollegenErgebnis) && kollegenErgebnis.length > 0) ? kollegenErgebnis[0].id : angebotsSlotData.id;
 
-        // 2. DEINE Buchung im Folgeslot & Halle finden
         const searchResponse = await fetch(
             `${SUPABASE_URL}/rest/v1/buchungen_db?datum=eq.${aktuellesDatum}&slot=gte.${naechsterBereich.start}&slot=lte.${naechsterBereich.ende}&verfasser=eq.${encodeURIComponent(activeUser)}&halle=eq.${encodeURIComponent(angebotsHalle)}&select=*`, 
             {
@@ -9199,11 +9200,9 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
         const meineBuchungId = meineBuchungen[0].id;
         const neuesMaterial = angebotsSlotData.material || "";
         
-        // --- GEÄNDERT: Nur originale Details übernehmen oder leer lassen (ohne "Übernommen von...") ---
         const rawDetail = angebotsSlotData.details || angebotsSlotData.detail || angebotsSlotData.materialDetail || angebotsSlotData.materialKommentar || angebotsSlotData.kommentar || "";
         const neueDetails = String(rawDetail).replace(/\s*\[weitergabe:(true|false)\]/g, "").trim();
 
-        // 3. UPDATE für DEINE Buchung
         const updateMeineBuchung = fetch(
             `${SUPABASE_URL}/rest/v1/buchungen_db?id=eq.${meineBuchungId}`, 
             {
@@ -9221,7 +9220,6 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
             }
         );
 
-        // 4. UPDATE für den KOLLEGEN: weitergabe auf "erledigt" setzen
         let updateKollege = Promise.resolve();
         if (kollegenBuchungsId) {
             updateKollege = fetch(
@@ -9243,10 +9241,8 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
 
         await Promise.all([updateMeineBuchung, updateKollege]);
 
-        // 5. Material-Info-Fenster (Overlay) direkt schließen
         document.querySelectorAll('.material-info-overlay').forEach(el => el.remove());
 
-        // 6. Lokalen Zustand direkt anpassen, damit das grüne Häkchen sofort erscheint
         if (window.lastPlanData && window.lastPlanData[slotNummer]) {
             window.lastPlanData[slotNummer].weitergabe = "erledigt";
             const box = document.querySelector(`[data-slot="${slotNummer}"]`);
@@ -9259,23 +9255,17 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
         console.error("Fehler bei der Materialübernahme:", err);
     }
 }
-
     
 async function pruefeUndRueckgaengigMachen(slotNummer, halle, neuerMaterialWert) {
-    // Wenn das Material gelöscht oder geleert wurde, prüfen wir den Vorgänger-Slot
     if (!neuerMaterialWert || neuerMaterialWert.trim() === "") {
         const datumInput = document.querySelector('input[type="date"]');
         const aktuellesDatum = datumInput && datumInput.value ? datumInput.value : new Date().toISOString().split('T')[0];
         
-        // Vorherigen Slot-Bereich ermitteln (die Gegenoperation zu ermittleNaechstenSlotBlock)
-        // Falls du eine Funktion hast, die den vorherigen Block ermittelt, nutze sie hier. 
-        // Alternativ suchen wir direkt im passenden Slot-Bereich des Vorgängers:
-        const vorherigerBereich = ermittleVorherigenSlotBlock(slotNummer); // Passe an, falls deine Funktion anders heißt
+        const vorherigerBereich = ermittleVorherigenSlotBlock(slotNummer);
 
         if (!vorherigerBereich) return;
 
         try {
-            // Suchen, ob es im vorherigen Slot in derselben Halle eine "erledigte" Weitergabe gibt
             const response = await fetch(
                 `${SUPABASE_URL}/rest/v1/buchungen_db?datum=eq.${aktuellesDatum}&slot=gte.${vorherigerBereich.start}&slot=lte.${vorherigerBereich.ende}&halle=eq.${encodeURIComponent(halle)}&weitergabe=eq.erledigt&select=*`,
                 {
@@ -9291,7 +9281,6 @@ async function pruefeUndRueckgaengigMachen(slotNummer, halle, neuerMaterialWert)
             if (Array.isArray(erledigteBuchungen) && erledigteBuchungen.length > 0) {
                 const kollegenBuchung = erledigteBuchungen[0];
 
-                // Status beim Kollegen von "erledigt" zurück auf "ja" (wieder anbietend) setzen
                 await fetch(
                     `${SUPABASE_URL}/rest/v1/buchungen_db?id=eq.${kollegenBuchung.id}`,
                     {
@@ -9308,7 +9297,6 @@ async function pruefeUndRueckgaengigMachen(slotNummer, halle, neuerMaterialWert)
                     }
                 );
 
-                // Lokalen Zustand beim Kollegen anpassen und UI sofort aktualisieren
                 const kollegenSlotNummer = kollegenBuchung.slot;
                 if (window.lastPlanData && window.lastPlanData[kollegenSlotNummer]) {
                     window.lastPlanData[kollegenSlotNummer].weitergabe = "ja";
