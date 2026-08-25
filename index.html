@@ -8581,12 +8581,12 @@ async function saveMaterialSelection(mat, detail, time, slot, klasse, btn, userK
     }
     const safeUserKuerzel = String(rawUserKuerzel).trim() || currentSlotData.verfasser || "";
 
-    // --- Aufruf deiner zentralen Funktion zum Zurücksetzen des "erledigt"-Status ---
+    // --- KORREKT: Aufruf mit slotNum, halle und dem neuen Materialwert (mat) ---
     try {
         if (typeof window.pruefeUndRueckgaengigMachen === 'function') {
-            await window.pruefeUndRueckgaengigMachen(slotNum, targetDate, halle);
+            await window.pruefeUndRueckgaengigMachen(slotNum, halle, mat);
         } else if (typeof pruefeUndRueckgaengigMachen === 'function') {
-            await pruefeUndRueckgaengigMachen(slotNum, targetDate, halle);
+            await pruefeUndRueckgaengigMachen(slotNum, halle, mat);
         }
     } catch (err) {
         console.error("Fehler beim Aufruf von pruefeUndRueckgaengigMachen im Save:", err);
@@ -8713,12 +8713,12 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
     }
     const safeUserKuerzel = String(rawUserKuerzel).trim() || currentSlotData.verfasser || "";
 
-    // --- Aufruf deiner zentralen Funktion zum Zurücksetzen des "erledigt"-Status ---
+    // --- KORREKT: Bei Delete wird ein leerer String übergeben, damit die Abfrage greift ---
     try {
         if (typeof window.pruefeUndRueckgaengigMachen === 'function') {
-            await window.pruefeUndRueckgaengigMachen(slotNum, targetDate, halle);
+            await window.pruefeUndRueckgaengigMachen(slotNum, halle, "");
         } else if (typeof pruefeUndRueckgaengigMachen === 'function') {
-            await pruefeUndRueckgaengigMachen(slotNum, targetDate, halle);
+            await pruefeUndRueckgaengigMachen(slotNum, halle, "");
         }
     } catch (err) {
         console.error("Fehler beim Aufruf von pruefeUndRueckgaengigMachen im Delete:", err);
