@@ -8764,7 +8764,7 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
                         await window.saveNewsToDBFrontend({
                             typ: "deal",
                             titel: "Material-Übernahme",
-                            text: `${safeUserKuerzel.toLowerCase()} hat die Material-Übernahme storniert/gelöscht.`,
+                            text: `${safeUserKuerzel.toLowerCase()} hat die Material-Übernahme storniert.`,
                             datum_event: targetDate,
                             slot: slotNum,
                             empfaenger: [zielEmpfaenger],
