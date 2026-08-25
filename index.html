@@ -9115,8 +9115,16 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
 }
 
 
-  async function uebernahmeAnnehmenAusfuehren(angebotsSlotData) {
-    const naechsterBereich = ermittleNaechstenSlotBlock(angebotsSlotData.slot);
+ async function uebernahmeAnnehmenAusfuehren(angebotsSlotData) {
+    const rawSlot = angebotsSlotData.slot || angebotsSlotData.slotId || angebotsSlotData.slot_id || 0;
+    const slotNummer = parseInt(rawSlot, 10);
+
+    if (!slotNummer || isNaN(slotNummer)) {
+        alert("Fehler: Konnte die Slot-Nummer des Angebots nicht ermitteln.");
+        return;
+    }
+
+    const naechsterBereich = ermittleNaechstenSlotBlock(slotNummer);
     const datumInput = document.querySelector('input[type="date"]');
     const aktuellesDatum = datumInput && datumInput.value ? datumInput.value : new Date().toISOString().split('T')[0];
 
@@ -9129,7 +9137,20 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
     }
 
     try {
-        // 1. DEINE Buchung im Folgeslot & Halle finden
+        // 1. Zuerst die genaue ID des Kollegeneintrags (Angebots) aus der DB holen, da angebotsSlotData.id oft fehlt
+        const kollegenQuery = await fetch(
+            `${SUPABASE_URL}/rest/v1/buchungen_db?datum=eq.${aktuellesDatum}&slot=eq.${slotNummer}&halle=eq.${encodeURIComponent(angebotsHalle)}&select=id`,
+            {
+                headers: {
+                    "apikey": SUPABASE_ANON_KEY,
+                    "Authorization": `Bearer ${SUPABASE_ANON_KEY}`
+                }
+            }
+        );
+        const kollegenErgebnis = await kollegenQuery.json();
+        const kollegenBuchungsId = (Array.isArray(kollegenErgebnis) && kollegenErgebnis.length > 0) ? kollegenErgebnis[0].id : angebotsSlotData.id;
+
+        // 2. DEINE Buchung im Folgeslot & Halle finden
         const searchResponse = await fetch(
             `${SUPABASE_URL}/rest/v1/buchungen_db?datum=eq.${aktuellesDatum}&slot=gte.${naechsterBereich.start}&slot=lte.${naechsterBereich.ende}&verfasser=eq.${encodeURIComponent(activeUser)}&halle=eq.${encodeURIComponent(angebotsHalle)}&select=*`, 
             {
@@ -9143,7 +9164,7 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
         const meineBuchungen = await searchResponse.json();
 
         if (!Array.isArray(meineBuchungen) || meineBuchungen.length === 0) {
-            alert("Fehler: Deine Buchung im Folgeslot wurde in dieser Halle nicht gefunden.");
+            alert(`Fehler: Deine Buchung im Folgeslot (Slots ${naechsterBereich.start}-${naechsterBereich.ende}) in Halle "${angebotsHalle}" wurde nicht gefunden.`);
             return;
         }
 
@@ -9151,7 +9172,7 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
         const neuesMaterial = angebotsSlotData.material || "";
         const neueDetails = `Übernommen von ${angebotsSlotData.verfasser || "Kollege"}: ${angebotsSlotData.details || angebotsSlotData.kommentar || ""}`;
 
-        // 2. UPDATE für DEINE Buchung (Material & Details einfügen)
+        // 3. UPDATE für DEINE Buchung
         const updateMeineBuchung = fetch(
             `${SUPABASE_URL}/rest/v1/buchungen_db?id=eq.${meineBuchungId}`, 
             {
@@ -9169,41 +9190,57 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
             }
         );
 
-        // 3. UPDATE für die Buchung des KOLLEGEN (weitergabe auf "uebernommen" oder "erledigt" setzen, damit das grüne Häkchen kommt)
-        const updateKollege = fetch(
-            `${SUPABASE_URL}/rest/v1/buchungen_db?id=eq.${angebotsSlotData.id}`, 
-            {
-                method: 'PATCH',
-                headers: {
-                    "apikey": SUPABASE_ANON_KEY,
-                    "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-                    "Content-Type": "application/json",
-                    "Prefer": "return=minimal"
-                },
-                body: JSON.stringify({
-                    weitergabe: "erledigt" // Oder wie auch immer ihr das Status-Flag nennen wollt
-                })
-            }
-        );
+        // 4. UPDATE für den KOLLEGEN: weitergabe explizit auf "erledigt" setzen
+        let updateKollege = Promise.resolve();
+        if (kollegenBuchungsId) {
+            updateKollege = fetch(
+                `${SUPABASE_URL}/rest/v1/buchungen_db?id=eq.${kollegenBuchungsId}`, 
+                {
+                    method: 'PATCH',
+                    headers: {
+                        "apikey": SUPABASE_ANON_KEY,
+                        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+                        "Content-Type": "application/json",
+                        "Prefer": "return=minimal"
+                    },
+                    body: JSON.stringify({
+                        weitergabe: "erledigt"
+                    })
+                }
+            );
+        }
 
-        // Beide Updates gleichzeitig abschicken
         await Promise.all([updateMeineBuchung, updateKollege]);
 
         alert("Material erfolgreich übernommen!");
         
-        // Plan im Frontend neu laden (falls ihr eine Funktion dafür habt, z.B. ladePlan() oder location.reload())
+        // 5. Lokalen Zustand direkt anpassen, damit das grüne Häkchen sofort ohne harten Reload erscheint
+        if (window.lastPlanData && window.lastPlanData[slotNummer]) {
+            window.lastPlanData[slotNummer].weitergabe = "erledigt";
+            const box = document.querySelector(`[data-slot="${slotNummer}"]`);
+            if (box) {
+                markBoxWithMaterialIcon(box, window.lastPlanData[slotNummer].material, window.lastPlanData[slotNummer].details);
+            }
+        }
+
+        // 6. Plan sanft für das aktuell ausgewählte Datum aktualisieren (ohne auf heute zurückzuspringen)
         if (typeof ladePlan === 'function') {
-            ladePlan();
+            ladePlan(false); // Übergabe false, damit das Datum beibehalten wird (je nach deiner ladePlan-Signatur)
+        } else if (typeof window.loadPlan === 'function') {
+            window.loadPlan(false);
         } else {
-            location.reload();
+            // Falls keine Sanft-Ladefunktion da ist, den aktuellen Tag im Datum-Picker beibehalten
+            const currentSelectedDate = aktuellesDatum;
+            if (typeof loadPlanForDate === 'function') {
+                loadPlanForDate(currentSelectedDate);
+            }
         }
 
     } catch (err) {
         console.error("Fehler bei der Materialübernahme:", err);
         alert("Ein unerwarteter Fehler ist aufgetreten.");
     }
-}  
-
+}
 
     
 
