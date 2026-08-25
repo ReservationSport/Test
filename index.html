@@ -8959,12 +8959,13 @@ async function showMaterialDetailPopup(klasse, material, detail, slotId = null) 
             };
         }
     } 
-    // --- Klick-Event korrigiert: Ruft nun die echte Funktion auf ---
+    // --- Klick-Event für Übernahme: Übergibt nun das Objekt mit explizit gesetzter Slot-Nummer ---
     else if (canTakeOver && slotId) {
         const takeOverBtn = overlay.querySelector('#popup-takeover-btn');
         if (takeOverBtn) {
             takeOverBtn.onclick = () => {
-                uebernahmeAnnehmenAusfuehren(slotData);
+                const datenMitSlot = { ...slotData, slot: slotId };
+                uebernahmeAnnehmenAusfuehren(datenMitSlot);
                 overlay.remove();
             };
         }
