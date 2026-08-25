@@ -9074,17 +9074,20 @@ function ermittleNaechstenSlotBlock(aktuellerSlot) {
     return { start: naechsterBlockStart, ende: naechsterBlockEnde };
 }
 
-// Die Hauptprüfung beim Klick auf das Material-Icon
+// Die korrigierte Hauptprüfung beim Klick auf das Material-Icon
 async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktuellerUser) {
-    // 1. Nächsten Slot-Bereich ermitteln (z.B. aus Slot 23 wird 26 bis 30)
+    // 1. Nächsten Slot-Bereich ermitteln (z.B. aus Slot 5 wird 6 bis 10)
     const naechsterBereich = ermittleNaechstenSlotBlock(angebotsSlot);
-    const todayStr = new Date().toISOString().split('T')[0];
+    
+    // 2. Aktuell ausgewähltes Datum dynamisch aus dem Input-Feld holen (mit Fallback auf heute)
+    const datumInput = document.querySelector('input[type="date"]');
+    const aktuellesDatum = datumInput && datumInput.value ? datumInput.value : new Date().toISOString().split('T')[0];
 
     try {
-        // 2. Abfrage an Supabase: Gibt es eine Buchung von mir im nächsten Block in derselben Halle?
-        // Wir prüfen, ob slot im Bereich [start...ende] liegt, klasse (oder user) passt und halle übereinstimmt
+        // 3. Abfrage an Supabase: 
+        // Wir prüfen das dynamische Datum, den nächsten Slot-Bereich, dein Kürzel im Feld 'verfasser' und die Halle
         const response = await fetch(
-            `${SUPABASE_URL}/rest/v1/buchungen_db?datum=eq.${todayStr}&slot=gte.${naechsterBereich.start}&slot=lte.${naechsterBereich.ende}&klasse=eq.${encodeURIComponent(aktuellerUser)}&halle=eq.${encodeURIComponent(angebotsHalle)}&select=*`, 
+            `${SUPABASE_URL}/rest/v1/buchungen_db?datum=eq.${aktuellesDatum}&slot=gte.${naechsterBereich.start}&slot=lte.${naechsterBereich.ende}&verfasser=eq.${encodeURIComponent(aktuellerUser)}&halle=eq.${encodeURIComponent(angebotsHalle)}&select=*`, 
             {
                 headers: {
                     "apikey": SUPABASE_ANON_KEY,
