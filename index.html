@@ -8697,8 +8697,24 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
     const now = new Date().toISOString();
     const halle = currentSlotData.halle || "";
 
-    // Ermitteln, wer an dem Slot beteiligt war (z.B. der ursprüngliche Anbieter)
-    const anbieterOderUebernehmer = currentSlotData.weitergabe || currentSlotData.verfasser || "";
+    // 1. Versuchen, den Partner (Anbieter) zu ermitteln:
+    // Entweder direkt aus weitergabe/verfasser oder durch Suchen im selben/vorherigen Slot mit gleicher Halle
+    let anbieterOderUebernehmer = currentSlotData.weitergabe || "";
+    
+    if (!anbieterOderUebernehmer && window.lastPlanData) {
+        // Suche in window.lastPlanData nach einer Buchung in derselben Halle, die als "erledigt" markiert war
+        for (let s in window.lastPlanData) {
+            const entry = window.lastPlanData[s];
+            if (entry && entry.halle === halle && entry.weitergabe && String(s) !== String(slotNum)) {
+                anbieterOderUebernehmer = entry.weitergabe;
+                break;
+            }
+        }
+    }
+    // Letzter Fallback auf verfasser, falls immer noch leer und nicht man selbst
+    if (!anbieterOderUebernehmer && currentSlotData.verfasser) {
+        anbieterOderUebernehmer = currentSlotData.verfasser;
+    }
 
     let rawUserKuerzel = "";
     if (typeof userKuerzel === 'string' && userKuerzel.trim() !== "") {
@@ -8709,9 +8725,11 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
         const el = document.getElementById('userKuerzel');
         rawUserKuerzel = el ? (el.value || "") : "";
     }
-    const safeUserKuerzel = String(rawUserKuerzel).trim() || currentSlotData.verfasser || "lp";
+    const safeUserKuerzel = String(rawUserKuerzel).trim() || "lp";
 
-    // --- KORREKT: Bei Delete wird ein leerer String übergeben, damit die Abfrage greift ---
+    console.log("🔍 Debug Stornierung - Ermittelter Partner (Anbieter):", anbieterOderUebernehmer);
+
+    // --- Rückgängig-Machen in DB ausführen ---
     try {
         if (typeof window.pruefeUndRueckgaengigMachen === 'function') {
             await window.pruefeUndRueckgaengigMachen(slotNum, halle, "");
@@ -8721,7 +8739,6 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
     } catch (err) {
         console.error("Fehler beim Aufruf von pruefeUndRueckgaengigMachen im Delete:", err);
     }
-    // -------------------------------------------------------------------------------
 
     const onCompleteVisuals = async (payloadData) => {
         if (btn) {
@@ -8729,10 +8746,8 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
             btn.style.opacity = "1";
         }
 
-        // News-Meldung senden, wenn ein Partner existiert und nicht man selbst der einzige ist
+        // News-Meldung senden, wenn ein Partner gefunden wurde und man nicht sich selbst schreibt
         if (anbieterOderUebernehmer) {
-            // Falls der Empfänger identisch mit dem Löschenden ist, aber vorher eine Weitergabe stattfand, 
-            // muss der ursprüngliche Anbieter trotzdem informiert werden.
             const zielEmpfaenger = (anbieterOderUebernehmer.toLowerCase() === safeUserKuerzel.toLowerCase() && currentSlotData.verfasser) 
                 ? currentSlotData.verfasser 
                 : anbieterOderUebernehmer;
@@ -8770,12 +8785,13 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
         }
         
         const box = document.querySelector(`[data-slot="${currentSlotId}"]`);
-        if (box) markBoxWithMaterialIcon(box, "", "");
+        if (box && typeof markBoxWithMaterialIcon === 'function') {
+            markBoxWithMaterialIcon(box, "", "");
+        }
         
-        closeEditor();
+        if (typeof closeEditor === 'function') closeEditor();
     };
 
-    // Payload für das Löschen (Material leer setzen)
     const payload = {
         origin: 'applyMaterialDelete',
         datum: targetDate,
