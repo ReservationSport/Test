@@ -8797,8 +8797,9 @@ function markBoxWithMaterialIcon(box, material, rawDetailInput) {
     const slotData = (window.lastPlanData && slot) ? window.lastPlanData[slot] : {};
     const detail = slotData.details || slotData.materialDetail || slotData.materialKommentar || rawDetailInput || "";
 
-    // Prüfung auf die neue Spalte "weitergabe", Fallback auf alten String
+    // Prüfungen für Weitergabe-Status
     const isAbzugeben = slotData.weitergabe === "ja" || String(detail).includes("[weitergabe:true]");
+    const isErledigt = slotData.weitergabe === "erledigt";
 
     const badge = document.createElement('div');
     badge.className = 'material-indicator';
@@ -8815,6 +8816,11 @@ function markBoxWithMaterialIcon(box, material, rawDetailInput) {
                 }
             </style>
             <span class="material-indicator-pulse" style="position: absolute; top: -2px; right: -2px; width: 5px; height: 5px; background-color: #ff9800; border-radius: 50%; border: 1px solid #111; animation: subtlePulse 1.8s infinite ease-in-out; z-index: 2;"></span>
+        `;
+    } else if (isErledigt) {
+        // --- NEU: Kleines grünes Häkchen, wenn die Übernahme abgeschlossen ist ---
+        badgeHTML += `
+            <span class="material-symbols-outlined" style="position: absolute; top: -6px; right: -6px; font-size: 14px; color: #4caf50; background: #111; border-radius: 50%; border: 1px solid #4caf50; z-index: 2;" title="Material erfolgreich übernommen">check</span>
         `;
     }
 
@@ -8876,7 +8882,7 @@ async function showMaterialDetailPopup(klasse, material, detail, slotId = null) 
         console.warn("Fehler bei der Besitzer-Prüfung:", err);
     }
 
-    // --- NEU: Prüfen, ob für eine fremde Box die Übernahme möglich ist ---
+    // --- Prüfen, ob für eine fremde Box die Übernahme möglich ist ---
     let canTakeOver = false;
     if (!isMyBox && isAbzugeben && slotId) {
         try {
@@ -8904,7 +8910,7 @@ async function showMaterialDetailPopup(klasse, material, detail, slotId = null) 
             <span id="popup-btn-text">${buttonText}</span>
         </div>`;
     } 
-    // --- NEU: Button für die Übernahme anzeigen, wenn berechtigt ---
+    // --- Button für die Übernahme anzeigen, wenn berechtigt ---
     else if (canTakeOver && slotId) {
         actionButtonHtml = `
         <div id="popup-takeover-btn" style="margin-top: 12px; padding: 12px; border-radius: 8px; text-align: center; cursor: pointer; font-size: 0.95rem; font-weight: bold; transition: all 0.2s; background: #4caf50; color: #fff; box-shadow: 0 2px 6px rgba(76,175,80,0.3);"
@@ -8953,12 +8959,12 @@ async function showMaterialDetailPopup(klasse, material, detail, slotId = null) 
             };
         }
     } 
-    // --- NEU: Klick-Event für den Übernahme-Button ---
+    // --- Klick-Event korrigiert: Ruft nun die echte Funktion auf ---
     else if (canTakeOver && slotId) {
         const takeOverBtn = overlay.querySelector('#popup-takeover-btn');
         if (takeOverBtn) {
             takeOverBtn.onclick = () => {
-                beuebernahmeAnnehmen(slotId, slotData);
+                uebernahmeAnnehmenAusfuehren(slotData);
                 overlay.remove();
             };
         }
@@ -9108,7 +9114,94 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
 }
 
 
-    
+  async function uebernahmeAnnehmenAusfuehren(angebotsSlotData) {
+    const naechsterBereich = ermittleNaechstenSlotBlock(angebotsSlotData.slot);
+    const datumInput = document.querySelector('input[type="date"]');
+    const aktuellesDatum = datumInput && datumInput.value ? datumInput.value : new Date().toISOString().split('T')[0];
+
+    const activeUser = typeof userKuerzel === 'string' ? userKuerzel : (typeof window.userKuerzel === 'string' ? window.userKuerzel : "");
+    const angebotsHalle = angebotsSlotData.halle || "";
+
+    if (!activeUser) {
+        alert("Fehler: Aktueller Benutzer konnte nicht ermittelt werden.");
+        return;
+    }
+
+    try {
+        // 1. DEINE Buchung im Folgeslot & Halle finden
+        const searchResponse = await fetch(
+            `${SUPABASE_URL}/rest/v1/buchungen_db?datum=eq.${aktuellesDatum}&slot=gte.${naechsterBereich.start}&slot=lte.${naechsterBereich.ende}&verfasser=eq.${encodeURIComponent(activeUser)}&halle=eq.${encodeURIComponent(angebotsHalle)}&select=*`, 
+            {
+                headers: {
+                    "apikey": SUPABASE_ANON_KEY,
+                    "Authorization": `Bearer ${SUPABASE_ANON_KEY}`
+                }
+            }
+        );
+        
+        const meineBuchungen = await searchResponse.json();
+
+        if (!Array.isArray(meineBuchungen) || meineBuchungen.length === 0) {
+            alert("Fehler: Deine Buchung im Folgeslot wurde in dieser Halle nicht gefunden.");
+            return;
+        }
+
+        const meineBuchungId = meineBuchungen[0].id;
+        const neuesMaterial = angebotsSlotData.material || "";
+        const neueDetails = `Übernommen von ${angebotsSlotData.verfasser || "Kollege"}: ${angebotsSlotData.details || angebotsSlotData.kommentar || ""}`;
+
+        // 2. UPDATE für DEINE Buchung (Material & Details einfügen)
+        const updateMeineBuchung = fetch(
+            `${SUPABASE_URL}/rest/v1/buchungen_db?id=eq.${meineBuchungId}`, 
+            {
+                method: 'PATCH',
+                headers: {
+                    "apikey": SUPABASE_ANON_KEY,
+                    "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal"
+                },
+                body: JSON.stringify({
+                    material: neuesMaterial,
+                    details: neueDetails
+                })
+            }
+        );
+
+        // 3. UPDATE für die Buchung des KOLLEGEN (weitergabe auf "uebernommen" oder "erledigt" setzen, damit das grüne Häkchen kommt)
+        const updateKollege = fetch(
+            `${SUPABASE_URL}/rest/v1/buchungen_db?id=eq.${angebotsSlotData.id}`, 
+            {
+                method: 'PATCH',
+                headers: {
+                    "apikey": SUPABASE_ANON_KEY,
+                    "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal"
+                },
+                body: JSON.stringify({
+                    weitergabe: "erledigt" // Oder wie auch immer ihr das Status-Flag nennen wollt
+                })
+            }
+        );
+
+        // Beide Updates gleichzeitig abschicken
+        await Promise.all([updateMeineBuchung, updateKollege]);
+
+        alert("Material erfolgreich übernommen!");
+        
+        // Plan im Frontend neu laden (falls ihr eine Funktion dafür habt, z.B. ladePlan() oder location.reload())
+        if (typeof ladePlan === 'function') {
+            ladePlan();
+        } else {
+            location.reload();
+        }
+
+    } catch (err) {
+        console.error("Fehler bei der Materialübernahme:", err);
+        alert("Ein unerwarteter Fehler ist aufgetreten.");
+    }
+}  
 
 
     
