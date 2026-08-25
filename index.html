@@ -8837,7 +8837,7 @@ function markBoxWithMaterialIcon(box, material, rawDetailInput) {
 }
 
 
-function showMaterialDetailPopup(klasse, material, detail, slotId = null) {
+async function showMaterialDetailPopup(klasse, material, detail, slotId = null) {
     const overlay = document.createElement('div');
     overlay.className = 'material-info-overlay';
     overlay.onclick = () => overlay.remove();
@@ -8876,7 +8876,23 @@ function showMaterialDetailPopup(klasse, material, detail, slotId = null) {
         console.warn("Fehler bei der Besitzer-Prüfung:", err);
     }
 
+    // --- NEU: Prüfen, ob für eine fremde Box die Übernahme möglich ist ---
+    let canTakeOver = false;
+    if (!isMyBox && isAbzugeben && slotId) {
+        try {
+            const activeUser = typeof userKuerzel === 'string' ? userKuerzel : (typeof window.userKuerzel === 'string' ? window.userKuerzel : "");
+            const angebotsHalle = slotData.halle || "";
+            
+            if (activeUser && angebotsHalle) {
+                canTakeOver = await pruefeObUebernahmeMoeglich(slotId, angebotsHalle, activeUser);
+            }
+        } catch (e) {
+            console.warn("Fehler bei der Übernahme-Berechtigung:", e);
+        }
+    }
+
     let actionButtonHtml = "";
+    
     if (isMyBox && slotId) {
         const buttonText = isAbzugeben ? 'Übergabe annullieren' : 'Übergabe anbieten';
         const buttonIcon = isAbzugeben ? 'block' : 'partner_exchange';
@@ -8886,6 +8902,15 @@ function showMaterialDetailPopup(klasse, material, detail, slotId = null) {
              onmouseover="this.style.background='#e08600'" onmouseout="this.style.background='#ff9800'">
             <span class="material-symbols-outlined" style="position: relative; top: -1px; vertical-align: middle; font-size: 18px; margin-right: 0 !important;">${buttonIcon}</span> 
             <span id="popup-btn-text">${buttonText}</span>
+        </div>`;
+    } 
+    // --- NEU: Button für die Übernahme anzeigen, wenn berechtigt ---
+    else if (canTakeOver && slotId) {
+        actionButtonHtml = `
+        <div id="popup-takeover-btn" style="margin-top: 12px; padding: 12px; border-radius: 8px; text-align: center; cursor: pointer; font-size: 0.95rem; font-weight: bold; transition: all 0.2s; background: #4caf50; color: #fff; box-shadow: 0 2px 6px rgba(76,175,80,0.3);"
+             onmouseover="this.style.background='#43a047'" onmouseout="this.style.background='#4caf50'">
+            <span class="material-symbols-outlined" style="position: relative; top: -1px; vertical-align: middle; font-size: 18px; margin-right: 0 !important;">check_circle</span> 
+            <span>Übernahme annehmen</span>
         </div>`;
     }
 
@@ -8897,7 +8922,6 @@ function showMaterialDetailPopup(klasse, material, detail, slotId = null) {
             <span style="font-size: 1.1rem; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                 Materialbuchung für <span style="color: #ff9800;">${klasse}</span>
             </span>
-
         </div>
         
         <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; border: 1px solid #444; text-align: left;">
@@ -8925,7 +8949,17 @@ function showMaterialDetailPopup(klasse, material, detail, slotId = null) {
         const actionBtn = overlay.querySelector('#popup-action-btn');
         if (actionBtn) {
             actionBtn.onclick = () => {
-                window.toggleMaterialAbgabe(slotId, !isAbzugeben);
+                window.utils?.toggleMaterialAbgabe ? window.utils.toggleMaterialAbgabe(slotId, !isAbzugeben) : window.toggleMaterialAbgabe(slotId, !isAbzugeben);
+            };
+        }
+    } 
+    // --- NEU: Klick-Event für den Übernahme-Button ---
+    else if (canTakeOver && slotId) {
+        const takeOverBtn = overlay.querySelector('#popup-takeover-btn');
+        if (takeOverBtn) {
+            takeOverBtn.onclick = () => {
+                beuebernahmeAnnehmen(slotId, slotData);
+                overlay.remove();
             };
         }
     }
@@ -9027,6 +9061,56 @@ window.toggleMaterialAbgabe = async function(slotId, activate) {
     }
 };
 
+
+
+
+// Hilfsfunktion: Findet heraus, zu welchem 5er-Block ein Slot gehört und gibt den nächsten 5er-Block zurück
+function ermittleNaechstenSlotBlock(aktuellerSlot) {
+    // Beispiel: Slot 23 / 5 = 4.6 -> aufgerundet 5. Nächster Block beginnt bei (5 * 5) + 1 = 26.
+    let aktuellerBlockNummer = Math.ceil(aktuellerSlot / 5);
+    let naechsterBlockStart = (aktuellerBlockNummer * 5) + 1;
+    let naechsterBlockEnde = naechsterBlockStart + 4;
+    
+    return { start: naechsterBlockStart, ende: naechsterBlockEnde };
+}
+
+// Die Hauptprüfung beim Klick auf das Material-Icon
+async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktuellerUser) {
+    // 1. Nächsten Slot-Bereich ermitteln (z.B. aus Slot 23 wird 26 bis 30)
+    const naechsterBereich = ermittleNaechstenSlotBlock(angebotsSlot);
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    try {
+        // 2. Abfrage an Supabase: Gibt es eine Buchung von mir im nächsten Block in derselben Halle?
+        // Wir prüfen, ob slot im Bereich [start...ende] liegt, klasse (oder user) passt und halle übereinstimmt
+        const response = await fetch(
+            `${SUPABASE_URL}/rest/v1/buchungen_db?datum=eq.${todayStr}&slot=gte.${naechsterBereich.start}&slot=lte.${naechsterBereich.ende}&klasse=eq.${encodeURIComponent(aktuellerUser)}&halle=eq.${encodeURIComponent(angebotsHalle)}&select=*`, 
+            {
+                headers: {
+                    "apikey": SUPABASE_ANON_KEY,
+                    "Authorization": `Bearer ${SUPABASE_ANON_KEY}`
+                }
+            }
+        );
+        
+        const data = await response.json();
+
+        // Wenn Einträge gefunden wurden, bist du im nächsten Block in derselben Halle eingetragen!
+        return Array.isArray(data) && data.length > 0;
+
+    } catch (err) {
+        console.error("Fehler bei der Überprüfung des nächsten Blocks:", err);
+        return false;
+    }
+}
+
+
+    
+
+
+    
+
+    
 
     /* ============================================================
    10.4. NOTIZ ERFASSEN
