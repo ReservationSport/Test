@@ -6937,7 +6937,7 @@ window.saveNewsToDBFrontend = async function(payload, currentMasterData) {
     // Fängt sowohl 'typ' als auch 'halle' ab und normalisiert es
     const rawTyp = (payload.typ || payload.halle || "").toString().toLowerCase().trim();
     
-    // "deal" wurde hier als erlaubter Typ ergänzt
+    // "deal" ist als erlaubter Typ eingetragen
     const erlaubteTypen = ["ausfall", "badi", "outdoor", "beendet", "meldung", "wunsch", "banner", "kasse", "vertretung", "idee", "apotheke", "deal"];
     if (!erlaubteTypen.includes(rawTyp)) {
         return; 
@@ -6958,7 +6958,7 @@ window.saveNewsToDBFrontend = async function(payload, currentMasterData) {
     const slotBasierteTypen = ["ausfall", "badi", "outdoor", "beendet"];
     const isSlotBased = slotBasierteTypen.includes(rawTyp);
 
-    // Event-Datum wird jetzt auch für andere Typen (wie "deal") korrekt aus dem Payload übernommen
+    // Event-Datum wird jetzt auch für "deal" korrekt aus dem Payload übernommen
     const eventDatum = payload.datum_event || (isSlotBased ? (payload.datum || payload.date || getLocalIsoDate()) : (payload.datum || payload.date || ""));
     
     const wochentage = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
@@ -7077,6 +7077,7 @@ window.saveNewsToDBFrontend = async function(payload, currentMasterData) {
                 empfaengerList = ["chef"];
             }
         } else if (payload.empfaenger) {
+            // WICHTIG FÜR "deal": Übernimmt das Array / den String der Empfänger direkt aus dem Payload
             empfaengerList = Array.isArray(payload.empfaenger) 
                 ? payload.empfaenger.map(e => e.trim().toLowerCase()) 
                 : payload.empfaenger.split(',').map(e => e.trim().toLowerCase());
