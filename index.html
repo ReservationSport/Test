@@ -8697,6 +8697,9 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
     const now = new Date().toISOString();
     const halle = currentSlotData.halle || "";
 
+    // Prüfen, ob es einen Übernehmer/Deal gab, den wir informieren müssen
+    const anbieterOderUebernehmer = currentSlotData.weitergabe || currentSlotData.verfasser || "";
+
     let rawUserKuerzel = "";
     if (typeof userKuerzel === 'string' && userKuerzel.trim() !== "") {
         rawUserKuerzel = userKuerzel;
@@ -8720,10 +8723,29 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
     }
     // -------------------------------------------------------------------------------
 
-    const onCompleteVisuals = (payloadData) => {
+    const onCompleteVisuals = async (payloadData) => {
         if (btn) {
             btn.style.pointerEvents = "auto";
             btn.style.opacity = "1";
+        }
+
+        // News-Meldung senden, falls vorher ein Deal/eine Weitergabe existierte
+        if (anbieterOderUebernehmer && anbieterOderUebernehmer.toLowerCase() !== safeUserKuerzel.toLowerCase()) {
+            if (typeof window.saveNewsToDBFrontend === 'function') {
+                try {
+                    await window.saveNewsToDBFrontend({
+                        typ: "deal",
+                        titel: "Material-Übernahme",
+                        text: `${safeUserKuerzel.toLowerCase()} hat die Material-Übernahme storniert.`,
+                        datum_event: targetDate,
+                        slot: slotNum,
+                        empfaenger: [anbieterOderUebernehmer],
+                        verfasser: safeUserKuerzel
+                    });
+                } catch (newsErr) {
+                    console.error("Fehler beim Senden der Deal-Stornierungs-News:", newsErr);
+                }
+            }
         }
 
         const currentSlotId = parseInt(payloadData.slot, 10);
@@ -8762,8 +8784,8 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
     };
 
     if (typeof window.prozessiereAktion === 'function') {
-        window.prozessiereAktion(payload, (data) => {
-            onCompleteVisuals(data);
+        window.prozessiereAktion(payload, async (data) => {
+            await onCompleteVisuals(data);
         });
     } else {
         console.warn("⚠️ prozessiereAktion nicht gefunden, führe Direkt-Fallback aus.");
@@ -8790,7 +8812,7 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
                 if (insertError) throw insertError;
             }
 
-            onCompleteVisuals(payload);
+            await onCompleteVisuals(payload);
             if (typeof syncPlan === 'function') syncPlan();
 
         } catch (e) {
