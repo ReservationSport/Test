@@ -6937,7 +6937,8 @@ window.saveNewsToDBFrontend = async function(payload, currentMasterData) {
     // Fängt sowohl 'typ' als auch 'halle' ab und normalisiert es
     const rawTyp = (payload.typ || payload.halle || "").toString().toLowerCase().trim();
     
-    const erlaubteTypen = ["ausfall", "badi", "outdoor", "beendet", "meldung", "wunsch", "banner", "kasse", "vertretung", "idee", "apotheke"];
+    // "deal" wurde hier als erlaubter Typ ergänzt
+    const erlaubteTypen = ["ausfall", "badi", "outdoor", "beendet", "meldung", "wunsch", "banner", "kasse", "vertretung", "idee", "apotheke", "deal"];
     if (!erlaubteTypen.includes(rawTyp)) {
         return; 
     }
@@ -6957,8 +6958,8 @@ window.saveNewsToDBFrontend = async function(payload, currentMasterData) {
     const slotBasierteTypen = ["ausfall", "badi", "outdoor", "beendet"];
     const isSlotBased = slotBasierteTypen.includes(rawTyp);
 
-    // Event-Datum nur bei Slot-basierten Events befüllen, bei anderen optional aus Payload
-    const eventDatum = isSlotBased ? (payload.datum || payload.date || getLocalIsoDate()) : (payload.datum || payload.date || "");
+    // Event-Datum wird jetzt auch für andere Typen (wie "deal") korrekt aus dem Payload übernommen
+    const eventDatum = payload.datum_event || (isSlotBased ? (payload.datum || payload.date || getLocalIsoDate()) : (payload.datum || payload.date || ""));
     
     const wochentage = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
     let zielTag = payload.wochentag;
@@ -6999,13 +7000,9 @@ window.saveNewsToDBFrontend = async function(payload, currentMasterData) {
         const empfaengerSet = new Set();
         const planData = window.lastPlanData || {};
 
-        // Berechne die 5 parallelen Slots desselben Zeitslots
         const rowIndex = Math.floor((slotNummer - 1) / 5);
         const startSlot = (rowIndex * 5) + 1;
 
-        console.log(`🔎 Suche Empfänger im gesamten Zeitslot (Slots ${startSlot} bis ${startSlot + 4}) für Verfasser: [${handelndeLP}]`);
-
-        // Alle 5 parallelen Slots durchgehen und Lehrer einsammeln
         for (let i = 0; i < 5; i++) {
             const currentSlot = startSlot + i;
             const slotData = planData[currentSlot];
@@ -7014,31 +7011,26 @@ window.saveNewsToDBFrontend = async function(payload, currentMasterData) {
                 const roherLehrerString = slotData.verfasser || slotData.lehrer || "";
                 if (roherLehrerString) {
                     roherLehrerString.split(/[,/]+/).forEach(k => {
-                        const cleanK = k.trim().toLowerCase(); // Konsequent lowercase
+                        const cleanK = k.trim().toLowerCase();
                         if (cleanK) empfaengerSet.add(cleanK);
                     });
                 }
             }
         }
 
-        // Fallback falls window.lastPlanData keine Daten liefert
         if (empfaengerSet.size === 0 && klasse && window.allClassTeachers) {
             const klassenLehrer = window.allClassTeachers[klasse] || window.allClassTeachers[klasse.toUpperCase()];
             if (klassenLehrer) {
                 klassenLehrer.toString().split(/[,/]+/).forEach(k => {
-                    const cleanK = k.trim().toLowerCase(); // Konsequent lowercase
+                    const cleanK = k.trim().toLowerCase();
                     if (cleanK) empfaengerSet.add(cleanK);
                 });
             }
         }
 
-        // Verfasser aus der Empfängerliste entfernen
         empfaengerSet.delete(handelndeLP);
         empfaengerList = Array.from(empfaengerSet);
 
-        console.log(`🎯 Finale Empfängerliste für Slot-Event (alle Kollegen im Zeitslot minus Verfasser):`, empfaengerList);
-
-        // Zeitfenster-Formatierung nur für Slot-Events
         const zeiten = [
             "07:15 - 08:00", "08:05 - 08:50", "08:55 - 09:40", 
             "10:00 - 10:45", "10:50 - 11:35", "11:40 - 12:25", 
@@ -7062,7 +7054,7 @@ window.saveNewsToDBFrontend = async function(payload, currentMasterData) {
 
     } else {
         // =========================================================================
-        // 2. ZUSATZFUNKTIONEN / TEAM-NEWS (Direkt via Payload übergeben)
+        // 2. ZUSATZFUNKTIONEN / TEAM-NEWS (inkl. "deal")
         // =========================================================================
         
         titelVal = payload.titel || "Information";
@@ -7106,8 +7098,8 @@ window.saveNewsToDBFrontend = async function(payload, currentMasterData) {
             slot_index: !isNaN(slotNummer) && slotNummer > 0 ? slotNummer : null,
             zeitfenster: payload.zeitfenster || zeitfensterString, 
             datum: new Date().toISOString(), 
-            titel: titelVal,                 
-            text: payloadText,               
+            titel: titelVal,                     
+            text: payloadText,                    
             klasse: klasse,
             verfasser: handelndeLP,          
             empfaenger: empfaengerString,    
@@ -7367,7 +7359,7 @@ async function markAsReadAndJump(news, event) {
     const user = (typeof userKuerzel !== 'undefined' && userKuerzel) ? userKuerzel.toLowerCase().trim() : "";
     const safeNewsText = (news.text !== null && news.text !== undefined) ? news.text.toString() : "";
     
-    // Einheitliche Typ-Erkennung über die Spalte 'typ' (und Fallback auf altes 'halle' falls vorhanden)
+    // Einheitliche Typ-Erkennung über die Spalte 'typ'
     const newsTyp = (news.typ !== null && news.typ !== undefined) ? news.typ.toString().toLowerCase().trim() : "";
     const hallenTypLower = (news.halle !== null && news.halle !== undefined) ? news.halle.toString().toLowerCase().trim() : "";
     const newsTextLower = safeNewsText.toLowerCase();
@@ -7378,13 +7370,15 @@ async function markAsReadAndJump(news, event) {
     const istMaterial = (newsTyp === "wunsch" || newsTyp === "material_wunsch" || hallenTypLower.includes("material_wunsch") || newsTextLower.includes("materialwunsch"));
     const istStv = (newsTyp === "vertretung" || newsTyp === "stellvertretung" || hallenTypLower.includes("stellvertretung") || newsTextLower.includes("abwesenheit"));
     const istApotheke = (newsTyp === "apotheke" || hallenTypLower.includes("apotheke_bestellung") || newsTextLower.includes("apotheken"));
+    
+    // "deal" ist ebenfalls stundenplanbezogen und soll direkt weiter unten zum Slot springen
+    const istDeal = (newsTyp === "deal" || newsTextLower.includes("übernimmt dein angebotenes material"));
 
     const sichereNewsListe = Array.isArray(meineRelevanteNews) ? meineRelevanteNews : [];
     const newsInListe = sichereNewsListe.find(n => n && n.id === news.id);
     
     if (newsInListe) {
         if (!newsInListe.gelesen) newsInListe.gelesen = "";
-        // Konsequent auf .toLowerCase() angepasst für den Abgleich
         if (!newsInListe.gelesen.toLowerCase().includes(user)) {
             newsInListe.gelesen = newsInListe.gelesen ? `${newsInListe.gelesen},${user}` : user;
         }
@@ -7455,7 +7449,7 @@ async function markAsReadAndJump(news, event) {
         return;
     }
 
-    // FÜR ALLE ANDEREN TYPEN (wie ausfall, badi, outdoor, beendet, etc.): 
+    // FÜR ALLE ANDEREN TYPEN SOWIE "deal": 
     // Datum und Sprung direkt zur entsprechenden Lektion im Kalender
     const eventDatum = news.datum_event || news.datum;
     if (eventDatum) {
@@ -9244,13 +9238,13 @@ async function uebernahmeAnnehmenAusfuehren(angebotsSlotData) {
 
         await Promise.all([updateMeineBuchung, updateKollege]);
 
-        // Automatische News an den Anbieter senden, falls ermittelbar
+       // Automatische News an den Anbieter senden, falls ermittelbar
         if (anbieterKuerzel && typeof window.saveNewsToDBFrontend === 'function') {
             await window.saveNewsToDBFrontend({
-                typ: "meldung",
+                typ: "deal", // Neuer eigener Typ für Material-Deals
                 titel: "Material-Übernahme",
                 text: `${activeUser.toLowerCase()} übernimmt dein angebotenes Material!`,
-                datum_event: aktuellesDatum, // Setzt das Datum der Materialübernahme für die Anzeige unten links
+                datum_event: aktuellesDatum, // Datum der Materialübernahme für unten links
                 slot: slotNummer,
                 empfaenger: [anbieterKuerzel],
                 verfasser: activeUser
