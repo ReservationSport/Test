@@ -8880,24 +8880,31 @@ function markBoxWithMaterialIcon(box, material, rawDetailInput) {
     const badge = document.createElement('div');
     badge.className = 'material-indicator';
     
-    let badgeHTML = '<span class="material-symbols-outlined" style="color: #ff9800; vertical-align: middle; position: relative; display: inline-block; margin-right: 0 !important;">shopping_cart</span>';
+    let badgeHTML = '';
 
-    if (isAbzugeben) {
-        badgeHTML += `
-            <style>
-                @keyframes subtlePulse {
-                    0% { transform: scale(1); opacity: 0.8; }
-                    50% { transform: scale(1.15); opacity: 1; box-shadow: 0 0 3px #ff9800; }
-                    100% { transform: scale(1); opacity: 0.8; }
-                }
-            </style>
-            <span class="material-indicator-pulse" style="position: absolute; top: -2px; right: -2px; width: 5px; height: 5px; background-color: #ff9800; border-radius: 50%; border: 1px solid #111; animation: subtlePulse 1.8s infinite ease-in-out; z-index: 2;"></span>
+    if (isErledigt) {
+        // --- ORanger Warenkorb, kleiner, zentriert im grünen Kreis ---
+        badgeHTML = `
+            <div style="display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; background-color: rgba(76, 175, 80, 0.15); border: 2px solid #4caf50; border-radius: 50%;" title="Material erfolgreich übernommen">
+                <span class="material-symbols-outlined" style="color: #ff9800; font-size: 13px; line-height: 1; margin-right: 0 !important;">shopping_cart</span>
+            </div>
         `;
-    } else if (isErledigt) {
-        // --- GEÄNDERT: Reiner grüner Haken ohne schwarzen Hintergrund/Rahmen ---
-        badgeHTML += `
-            <span class="material-symbols-outlined" style="position: absolute; top: -6px; right: -6px; font-size: 16px; color: #4caf50; background: transparent; z-index: 2;" title="Material erfolgreich übernommen">check</span>
-        `;
+    } else {
+        // Standard-Warenkorb (ohne Kreis)
+        badgeHTML = '<span class="material-symbols-outlined" style="color: #ff9800; vertical-align: middle; position: relative; display: inline-block; margin-right: 0 !important;">shopping_cart</span>';
+
+        if (isAbzugeben) {
+            badgeHTML += `
+                <style>
+                    @keyframes subtlePulse {
+                        0% { transform: scale(1); opacity: 0.8; }
+                        50% { transform: scale(1.15); opacity: 1; box-shadow: 0 0 3px #ff9800; }
+                        100% { transform: scale(1); opacity: 0.8; }
+                    }
+                </style>
+                <span class="material-indicator-pulse" style="position: absolute; top: -2px; right: -2px; width: 5px; height: 5px; background-color: #ff9800; border-radius: 50%; border: 1px solid #111; animation: subtlePulse 1.8s infinite ease-in-out; z-index: 2;"></span>
+            `;
+        }
     }
 
     badge.innerHTML = badgeHTML;
