@@ -9224,13 +9224,6 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
             }
         }
 
-        // 7. Plan sanft aktualisieren (ohne das Datum zu verlieren)
-        if (typeof ladePlan === 'function') {
-            ladePlan(false);
-        } else if (typeof window.loadPlan === 'function') {
-            window.loadPlan(false);
-        }
-
     } catch (err) {
         console.error("Fehler bei der Materialübernahme:", err);
     }
