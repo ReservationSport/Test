@@ -8567,6 +8567,7 @@ async function saveMaterialSelection(mat, detail, time, slot, klasse, btn, userK
     const targetDate = document.getElementById('datePicker')?.value || new Date().toISOString().split('T')[0];
     const slotNum = parseInt(slot, 10);
     const now = new Date().toISOString();
+    const halle = currentSlotData.halle || "";
 
     // Kürzel verlässlich ermitteln
     let rawUserKuerzel = "";
@@ -8579,6 +8580,49 @@ async function saveMaterialSelection(mat, detail, time, slot, klasse, btn, userK
         rawUserKuerzel = el ? (el.value || "") : "";
     }
     const safeUserKuerzel = String(rawUserKuerzel).trim() || currentSlotData.verfasser || "";
+
+    // --- NEU: Prüfen ob ein vorheriger "erledigt"-Status bei Materialänderung zurückgesetzt werden muss ---
+    try {
+        const vorherigerBereich = typeof ermittleVorherigenSlotBlock === 'function' ? ermittleVorherigenSlotBlock(slotNum) : null;
+        if (vorherigerBereich && halle && window.supabaseClient) {
+            const { data: erledigteBuchungen, error: checkError } = await window.supabaseClient
+                .from('buchungen_db')
+                .select('*')
+                .eq('datum', targetDate)
+                .gte('slot', vorherigerBereich.start)
+                .lte('slot', vorherigerBereich.ende)
+                .eq('halle', halle)
+                .eq('weitergabe', 'erledigt');
+
+            if (!checkError && Array.isArray(erledigteBuchungen) && erledigteBuchungen.length > 0) {
+                const kollegenBuchung = erledigteBuchungen[0];
+                
+                // Status beim Kollegen von "erledigt" zurück auf "ja" ändern via Supabase Client
+                const { error: updateError } = await window.supabaseClient
+                    .from('buchungen_db')
+                    .update({ weitergabe: "ja" })
+                    .eq('id', kollegenBuchung.id);
+
+                if (!updateError) {
+                    const kollegenSlotNummer = kollegenBuchung.slot;
+                    if (window.lastPlanData && window.lastPlanData[kollegenSlotNummer]) {
+                        window.lastPlanData[kollegenSlotNummer].weitergabe = "ja";
+                        const kollegenBox = document.querySelector(`[data-slot="${kollegenSlotNummer}"]`);
+                        if (kollegenBox) {
+                            markBoxWithMaterialIcon(
+                                kollegenBox, 
+                                window.lastPlanData[kollegenSlotNummer].material, 
+                                window.lastPlanData[kollegenSlotNummer].details
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Fehler beim Zurücksetzen der Übernahme im Save:", err);
+    }
+    // -----------------------------------------------------------------------------------------------
 
     // Visueller Callback nach erfolgreicher Verarbeitung durch prozessiereAktion
     const onCompleteVisuals = (payloadData) => {
@@ -8614,7 +8658,7 @@ async function saveMaterialSelection(mat, detail, time, slot, klasse, btn, userK
         slot: slotNum.toString(),
         time: time,
         klasse: klasse || currentSlotData.klasse || "",
-        halle: currentSlotData.halle || "",
+        halle: halle,
         material: mat,
         kommentar: currentSlotData.kommentar || "",
         details: detail || "",
@@ -8685,6 +8729,7 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
     const targetDate = document.getElementById('datePicker')?.value || new Date().toISOString().split('T')[0];
     const slotNum = parseInt(slot, 10);
     const now = new Date().toISOString();
+    const halle = currentSlotData.halle || "";
 
     let rawUserKuerzel = "";
     if (typeof userKuerzel === 'string' && userKuerzel.trim() !== "") {
@@ -8696,6 +8741,49 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
         rawUserKuerzel = el ? (el.value || "") : "";
     }
     const safeUserKuerzel = String(rawUserKuerzel).trim() || currentSlotData.verfasser || "";
+
+    // --- NEU: Prüfen ob ein vorheriger "erledigt"-Status zurückgesetzt werden muss ---
+    try {
+        const vorherigerBereich = typeof ermittleVorherigenSlotBlock === 'function' ? ermittleVorherigenSlotBlock(slotNum) : null;
+        if (vorherigerBereich && halle && window.supabaseClient) {
+            const { data: erledigteBuchungen, error: checkError } = await window.supabaseClient
+                .from('buchungen_db')
+                .select('*')
+                .eq('datum', targetDate)
+                .gte('slot', vorherigerBereich.start)
+                .lte('slot', vorherigerBereich.ende)
+                .eq('halle', halle)
+                .eq('weitergabe', 'erledigt');
+
+            if (!checkError && Array.isArray(erledigteBuchungen) && erledigteBuchungen.length > 0) {
+                const kollegenBuchung = erledigteBuchungen[0];
+                
+                // Status beim Kollegen von "erledigt" zurück auf "ja" ändern via Supabase Client
+                const { error: updateError } = await window.supabaseClient
+                    .from('buchungen_db')
+                    .update({ weitergabe: "ja" })
+                    .eq('id', kollegenBuchung.id);
+
+                if (!updateError) {
+                    const kollegenSlotNummer = kollegenBuchung.slot;
+                    if (window.lastPlanData && window.lastPlanData[kollegenSlotNummer]) {
+                        window.lastPlanData[kollegenSlotNummer].weitergabe = "ja";
+                        const kollegenBox = document.querySelector(`[data-slot="${kollegenSlotNummer}"]`);
+                        if (kollegenBox) {
+                            markBoxWithMaterialIcon(
+                                kollegenBox, 
+                                window.lastPlanData[kollegenSlotNummer].material, 
+                                window.lastPlanData[kollegenSlotNummer].details
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Fehler beim Zurücksetzen der Übernahme im Delete:", err);
+    }
+    // -------------------------------------------------------------------------------
 
     const onCompleteVisuals = (payloadData) => {
         if (btn) {
@@ -8728,7 +8816,7 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
         slot: slotNum.toString(),
         time: time,
         klasse: klasse || currentSlotData.klasse || "",
-        halle: currentSlotData.halle || "",
+        halle: halle,
         material: "",
         kommentar: currentSlotData.kommentar || "",
         details: "",
@@ -9170,7 +9258,10 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
 
         const meineBuchungId = meineBuchungen[0].id;
         const neuesMaterial = angebotsSlotData.material || "";
-        const neueDetails = `Übernommen von ${angebotsSlotData.verfasser || "Kollege"}: ${angebotsSlotData.details || angebotsSlotData.kommentar || ""}`;
+        
+        // --- GEÄNDERT: Nur originale Details übernehmen oder leer lassen (ohne "Übernommen von...") ---
+        const rawDetail = angebotsSlotData.details || angebotsSlotData.detail || angebotsSlotData.materialDetail || angebotsSlotData.materialKommentar || angebotsSlotData.kommentar || "";
+        const neueDetails = String(rawDetail).replace(/\s*\[weitergabe:(true|false)\]/g, "").trim();
 
         // 3. UPDATE für DEINE Buchung
         const updateMeineBuchung = fetch(
@@ -9230,7 +9321,70 @@ async function pruefeObUebernahmeMoeglich(angebotsSlot, angebotsHalle, aktueller
 }
 
     
+async function pruefeUndRueckgaengigMachen(slotNummer, halle, neuerMaterialWert) {
+    // Wenn das Material gelöscht oder geleert wurde, prüfen wir den Vorgänger-Slot
+    if (!neuerMaterialWert || neuerMaterialWert.trim() === "") {
+        const datumInput = document.querySelector('input[type="date"]');
+        const aktuellesDatum = datumInput && datumInput.value ? datumInput.value : new Date().toISOString().split('T')[0];
+        
+        // Vorherigen Slot-Bereich ermitteln (die Gegenoperation zu ermittleNaechstenSlotBlock)
+        // Falls du eine Funktion hast, die den vorherigen Block ermittelt, nutze sie hier. 
+        // Alternativ suchen wir direkt im passenden Slot-Bereich des Vorgängers:
+        const vorherigerBereich = ermittleVorherigenSlotBlock(slotNummer); // Passe an, falls deine Funktion anders heißt
 
+        if (!vorherigerBereich) return;
+
+        try {
+            // Suchen, ob es im vorherigen Slot in derselben Halle eine "erledigte" Weitergabe gibt
+            const response = await fetch(
+                `${SUPABASE_URL}/rest/v1/buchungen_db?datum=eq.${aktuellesDatum}&slot=gte.${vorherigerBereich.start}&slot=lte.${vorherigerBereich.ende}&halle=eq.${encodeURIComponent(halle)}&weitergabe=eq.erledigt&select=*`,
+                {
+                    headers: {
+                        "apikey": SUPABASE_ANON_KEY,
+                        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`
+                    }
+                }
+            );
+
+            const erledigteBuchungen = await response.json();
+
+            if (Array.isArray(erledigteBuchungen) && erledigteBuchungen.length > 0) {
+                const kollegenBuchung = erledigteBuchungen[0];
+
+                // Status beim Kollegen von "erledigt" zurück auf "ja" (wieder anbietend) setzen
+                await fetch(
+                    `${SUPABASE_URL}/rest/v1/buchungen_db?id=eq.${kollegenBuchung.id}`,
+                    {
+                        method: 'PATCH',
+                        headers: {
+                            "apikey": SUPABASE_ANON_KEY,
+                            "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+                            "Content-Type": "application/json",
+                            "Prefer": "return=minimal"
+                        },
+                        body: JSON.stringify({
+                            weitergabe: "ja"
+                        })
+                    }
+                );
+
+                // Lokalen Zustand beim Kollegen anpassen und UI sofort aktualisieren
+                const kollegenSlotNummer = kollegenBuchung.slot;
+                if (window.lastPlanData && window.lastPlanData[kollegenSlotNummer]) {
+                    window.lastPlanData[kollegenSlotNummer].weitergabe = "ja";
+                    const kollegenBox = document.querySelector(`[data-slot="${kollegenSlotNummer}"]`);
+                    if (kollegenBox) {
+                        markBoxWithMaterialIcon(kollegenBox, window.lastPlanData[kollegenSlotNummer].material, window.lastPlanData[kollegenSlotNummer].details);
+                    }
+                }
+                
+                console.log("Übernahme wurde rückgängig gemacht: Kollege steht wieder auf Weitergabe 'ja'.");
+            }
+        } catch (err) {
+            console.error("Fehler beim Prüfen des Rückgängig-Machens:", err);
+        }
+    }
+}
     
 
     /* ============================================================
