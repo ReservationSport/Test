@@ -8818,9 +8818,9 @@ function markBoxWithMaterialIcon(box, material, rawDetailInput) {
             <span class="material-indicator-pulse" style="position: absolute; top: -2px; right: -2px; width: 5px; height: 5px; background-color: #ff9800; border-radius: 50%; border: 1px solid #111; animation: subtlePulse 1.8s infinite ease-in-out; z-index: 2;"></span>
         `;
     } else if (isErledigt) {
-        // --- NEU: Kleines grünes Häkchen, wenn die Übernahme abgeschlossen ist ---
+        // --- GEÄNDERT: Reiner grüner Haken ohne schwarzen Hintergrund/Rahmen ---
         badgeHTML += `
-            <span class="material-symbols-outlined" style="position: absolute; top: -6px; right: -6px; font-size: 14px; color: #4caf50; background: #111; border-radius: 50%; border: 1px solid #4caf50; z-index: 2;" title="Material erfolgreich übernommen">check</span>
+            <span class="material-symbols-outlined" style="position: absolute; top: -6px; right: -6px; font-size: 16px; color: #4caf50; background: transparent; z-index: 2;" title="Material erfolgreich übernommen">check</span>
         `;
     }
 
