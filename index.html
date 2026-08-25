@@ -8698,7 +8698,7 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
     const now = new Date().toISOString();
     const halle = currentSlotData.halle || "";
 
-    // Prüfen, ob es einen Übernehmer/Deal gab, den wir informieren müssen
+    // Ermitteln, wer an dem Slot beteiligt war (z.B. der ursprüngliche Anbieter)
     const anbieterOderUebernehmer = currentSlotData.weitergabe || currentSlotData.verfasser || "";
 
     let rawUserKuerzel = "";
@@ -8710,7 +8710,7 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
         const el = document.getElementById('userKuerzel');
         rawUserKuerzel = el ? (el.value || "") : "";
     }
-    const safeUserKuerzel = String(rawUserKuerzel).trim() || currentSlotData.verfasser || "";
+    const safeUserKuerzel = String(rawUserKuerzel).trim() || currentSlotData.verfasser || "lp";
 
     // --- KORREKT: Bei Delete wird ein leerer String übergeben, damit die Abfrage greift ---
     try {
@@ -8730,21 +8730,30 @@ async function applyMaterialDelete(time, slot, klasse, btn, userKuerzel) {
             btn.style.opacity = "1";
         }
 
-        // News-Meldung senden, falls vorher ein Deal/eine Weitergabe existierte
-        if (anbieterOderUebernehmer && anbieterOderUebernehmer.toLowerCase() !== safeUserKuerzel.toLowerCase()) {
-            if (typeof window.saveNewsToDBFrontend === 'function') {
-                try {
-                    await window.saveNewsToDBFrontend({
-                        typ: "deal",
-                        titel: "Material-Übernahme",
-                        text: `${safeUserKuerzel.toLowerCase()} hat die Material-Übernahme storniert.`,
-                        datum_event: targetDate,
-                        slot: slotNum,
-                        empfaenger: [anbieterOderUebernehmer],
-                        verfasser: safeUserKuerzel
-                    });
-                } catch (newsErr) {
-                    console.error("Fehler beim Senden der Deal-Stornierungs-News:", newsErr);
+        // News-Meldung senden, wenn ein Partner existiert und nicht man selbst der einzige ist
+        if (anbieterOderUebernehmer) {
+            // Falls der Empfänger identisch mit dem Löschenden ist, aber vorher eine Weitergabe stattfand, 
+            // muss der ursprüngliche Anbieter trotzdem informiert werden.
+            const zielEmpfaenger = (anbieterOderUebernehmer.toLowerCase() === safeUserKuerzel.toLowerCase() && currentSlotData.verfasser) 
+                ? currentSlotData.verfasser 
+                : anbieterOderUebernehmer;
+
+            if (zielEmpfaenger.toLowerCase() !== safeUserKuerzel.toLowerCase()) {
+                if (typeof window.saveNewsToDBFrontend === 'function') {
+                    try {
+                        await window.saveNewsToDBFrontend({
+                            typ: "deal",
+                            titel: "Material-Übernahme",
+                            text: `${safeUserKuerzel.toLowerCase()} hat die Material-Übernahme storniert/gelöscht.`,
+                            datum_event: targetDate,
+                            slot: slotNum,
+                            empfaenger: [zielEmpfaenger],
+                            verfasser: safeUserKuerzel
+                        });
+                        console.log("🎯 Stornierungs-News erfolgreich an", zielEmpfaenger, "gesendet.");
+                    } catch (newsErr) {
+                        console.error("Fehler beim Senden der Deal-Stornierungs-News:", newsErr);
+                    }
                 }
             }
         }
